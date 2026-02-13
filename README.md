@@ -69,5 +69,5 @@ Tip: You can change the Segmentation model to generate better masks. [Check Here
 
 ### License: MIT
 <br> Copyright (c) 2026 Akash Bora
-**Get more video effects at [www.akascape.com](https://www.akascape.com) 👈**
+<br> **Get more video effects at [www.akascape.com](https://www.akascape.com) 👈**
 
