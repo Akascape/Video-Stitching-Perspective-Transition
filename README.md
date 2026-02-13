@@ -30,9 +30,13 @@ pip install -r requirements.txt
 ```
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
-### After installing, run the script:
+### Running the script
 ```
 python video_stitcher.py -a path/to/videoA.mp4 -b path/to/videoB.mp4 -o output.mp4 --overlap 42 --loftr-max-dim 1152 --fade-in 10 --fade-out 10
+```
+OR simply go with default command:
+```
+python video_stitcher.py -a path/to/videoA.mp4 -b path/to/videoB.mp4 -o output.mp4
 ```
 ### Arguments
 | Argument           | Short | Type   | Default           | Description                                                        |
