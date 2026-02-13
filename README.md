@@ -61,7 +61,7 @@ Steps
 - Download the `indoor_ds_new.ckpt` from this drive link: [Google Drive](https://drive.google.com/drive/folders/1xu2Pq6mZT5hmFgiYMBT9Zt8h1yO-3SIp)
 - Rename the file from `indoor_ds_new.ckpt` to  `loftr_indoor_ds_new.ckpt`
 - Paste the file in `C:\Users\user\.cache\torch\hub\checkpoints`
-That's it, it will solve the error. (This is not an issue with other models)
+<br> That's it, it will solve the error. (This is not an issue with other models)
 
 ### Example
 | PRE CLIP | POST CLIP | STITCHED CLIP |
