@@ -61,7 +61,11 @@ Steps
 That's it, it will solve the error. (This is not an issue with other models)
 
 ### Example
+| PRE CLIP | POST CLIP | STITCHED CLIP |
+|----------|-----------|---------------|
+| <video src="https://github.com/user-attachments/assets/8ac92816-4d1b-4f5f-bd86-4579c5b70cdb" controls width="250"></video> | <video src="https://github.com/user-attachments/assets/777d6f5a-a215-4310-a6ab-0924034a7fa7" controls width="250"></video> | <video src="https://github.com/user-attachments/assets/4b076979-e95d-4df8-9208-2731487e3e5e" controls width="250"></video> |
 
+Tip: You can change the Segmentation model to generate better masks. [Check Here](https://pytorch.org/hub/?_sft_lf-model-type=vision)
 
 ### License: MIT
 <br> Copyright (c) 2026 Akash Bora
