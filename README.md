@@ -63,7 +63,7 @@ That's it, it will solve the error. (This is not an issue with other models)
 ### Example
 | PRE CLIP | POST CLIP | STITCHED CLIP |
 |----------|-----------|---------------|
-| <video src="https://github.com/user-attachments/assets/8ac92816-4d1b-4f5f-bd86-4579c5b70cdb" controls width="250"></video> | <video src="https://github.com/user-attachments/assets/777d6f5a-a215-4310-a6ab-0924034a7fa7" controls width="250"></video> | <video src="https://github.com/user-attachments/assets/4b076979-e95d-4df8-9208-2731487e3e5e" controls width="250"></video> |
+| ![pre](https://github.com/user-attachments/assets/38da0f57-c646-4e71-b4d0-2aeff8ba3be9) | ![post2-ezgif com-resize](https://github.com/user-attachments/assets/d88150d5-e5c2-4c8d-96a7-ce9a29b0a01c) | ![transtion2](https://github.com/user-attachments/assets/c65c29f4-7831-4c80-b248-f94449e72c85) |
 
 Tip: You can change the Segmentation model to generate better masks. [Check Here](https://pytorch.org/hub/?_sft_lf-model-type=vision)
 
