@@ -49,7 +49,7 @@ python video_stitcher.py -a path/to/videoA.mp4 -b path/to/videoB.mp4 -o output.m
 | `--fade-in`        |       | int    | `10`              | Number of frames to fade in the foreground at the start            |
 | `--fade-out`       |       | int    | `10`              | Number of frames to fade out the pre-clip at the end               |
 
-Use `the video_stitcher_layers.py` to get separate outputs synced layers for compositing.
+Use the `video_stitcher_layers.py` to get separate outputs synced layers for compositing.
 
 ### Fix download issues:
 ```
