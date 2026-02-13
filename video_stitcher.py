@@ -1,9 +1,9 @@
 """
 Video Stitcher with Smooth Transitions using LoFTR and DeepLabV3
 Author: Akash Bora (@akascape on GitHub)
+Modified: Dynamic Perspective Interpolation, Clean Border Compositing & Fast Foreground Removal
 License: MIT
-Copyright (c) 2026 Akascape
-Repo URL: https://github.com/Akascape/Video-Stitching-Perspective-Transition
+Version: 2
 """
 import cv2
 import torch
@@ -65,62 +65,21 @@ def preprocess_for_loftr(img_bgr, device, max_dim):
     return img_tensor.to(device), scale
 
 def main():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(
-        description="Video stitcher with smooth transitions using LoFTR feature matching and DeepLabV3 segmentation"
-    )
-    parser.add_argument(
-        "-a", "--video-a",
-        default="pre.mp4",
-        help="Path to first video clip (Outgoing) (default: pre2.mp4)"
-    )
-    parser.add_argument(
-        "-b", "--video-b",
-        default="post.mp4",
-        help="Path to second video clip (Incoming) (default: post2.mp4)"
-    )
-    parser.add_argument(
-        "-o", "--output",
-        default="transition.mp4",
-        help="Output video path (default: transition.mp4)"
-    )
-    parser.add_argument(
-        "--overlap",
-        type=int,
-        default=40,
-        help="Number of frames to overlap/transition between videos (default: 42)"
-    )
-    parser.add_argument(
-        "--loftr-max-dim",
-        type=int,
-        default=1152,
-        help="Maximum dimension for LoFTR feature matching (higher = better quality, more compute) (default: 1152)"
-    )
-    parser.add_argument(
-        "--fade-in",
-        type=int,
-        default=10,
-        help="Number of frames to fade in the foreground at the start (default: 10)"
-    )
-    parser.add_argument(
-        "--fade-out",
-        type=int,
-        default=10,
-        help="Number of frames to fade out the pre-clip at the end (default: 10)"
-    )
-    
+    parser = argparse.ArgumentParser(description="Video stitcher with smooth transitions using LoFTR and DeepLabV3")
+    parser.add_argument("-a", "--video-a", default="pre.mp4", help="Path to first video clip")
+    parser.add_argument("-b", "--video-b", default="post.mp4", help="Path to second video clip")
+    parser.add_argument("-o", "--output", default="transition.mp4", help="Output video path")
+    parser.add_argument("--overlap", type=int, default=40, help="Number of frames to overlap/transition")
+    parser.add_argument("--loftr-max-dim", type=int, default=1152, help="Max dim for LoFTR")
+    parser.add_argument("--fade-in", type=int, default=10, help="Frames to fade in foreground")
+    parser.add_argument("--fade-out", type=int, default=10, help="Frames to fade out pre-clip")
     args = parser.parse_args()
     
-    # Setup variables from arguments
-    VIDEO_A_PATH = args.video_a
-    VIDEO_B_PATH = args.video_b
-    OUTPUT_PATH = args.output
+    VIDEO_A_PATH, VIDEO_B_PATH, OUTPUT_PATH = args.video_a, args.video_b, args.output
     OVERLAP_FRAMES = args.overlap
     LOFTR_MAX_DIM = args.loftr_max_dim
-    FADE_IN_FRAMES = args.fade_in
-    FADE_OUT_FRAMES = args.fade_out
+    FADE_IN_FRAMES, FADE_OUT_FRAMES = args.fade_in, args.fade_out
     
-    # Setup
     matcher = LoFTR(pretrained="indoor_new").to(DEVICE)
     matcher.eval()
     seg_model = get_segmentation_model(DEVICE)
@@ -137,10 +96,10 @@ def main():
         print(f"Error: Video B is too short. Needs at least {OVERLAP_FRAMES+1} frames.")
         sys.exit(1)
 
-    print(f"Computing alignment: Video A (End) <-> Video B (Frame {OVERLAP_FRAMES})...")
+    print(f"Computing alignment: Video A (End) <-> Video B (Overlap End)...")
     
     img_a_ref = frames_a[-1] 
-    img_b_ref = frames_b[OVERLAP_FRAMES] 
+    img_b_ref = frames_b[OVERLAP_FRAMES - 1] 
 
     tensor_a, scale_a = preprocess_for_loftr(img_a_ref, DEVICE, LOFTR_MAX_DIM)
     tensor_b, scale_b = preprocess_for_loftr(img_b_ref, DEVICE, LOFTR_MAX_DIM)
@@ -154,75 +113,97 @@ def main():
         print("Error: Not enough matches.")
         sys.exit(1)
 
+    # H maps Video B -> Video A
     H, _ = cv2.findHomography(mkpts1, mkpts0, cv2.RANSAC, 5.0)
+    
+    # Normalize matrices
+    H_BA = H / H[2, 2]
+    H_AB = np.linalg.inv(H_BA)
+    H_AB = H_AB / H_AB[2, 2]
+    I = np.eye(3)
 
-    # Render
     print("Rendering...")
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(OUTPUT_PATH, fourcc, fps, (w, h))
 
-    # Calculate where the transition starts in Video A
     transition_start_idx = len(frames_a) - OVERLAP_FRAMES
+    dummy_white_frame = np.ones((h, w), dtype=np.uint8) * 255
+    erosion_kernel = np.ones((3,3), np.uint8)
 
-    # --- RENDER VIDEO A (+ GHOST B) ---
-    for i, frame_a in enumerate(frames_a):
+    # --- RENDER PRE-TRANSITION ---
+    for i in range(transition_start_idx):
+        out.write(frames_a[i])
+
+    # --- RENDER OVERLAP TRANSITION ---
+    for i in range(OVERLAP_FRAMES):
+        t = i / max(1, (OVERLAP_FRAMES - 1))
         
-        if i >= transition_start_idx:
-            b_idx = i - transition_start_idx
-            frame_b = frames_b[b_idx]
+        # Interpolate matrices
+        H_A_t = (1 - t) * I + t * H_AB
+        H_B_t = (1 - t) * H_BA + t * I
+        
+        frame_a = frames_a[transition_start_idx + i]
+        frame_b = frames_b[i]
 
-            # Get Mask
-            mask = get_person_mask(frame_b, seg_model, DEVICE)
-            warped_b = cv2.warpPerspective(frame_b, H, (w, h), borderMode=cv2.BORDER_REPLICATE)
-            warped_mask = cv2.warpPerspective(mask, H, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        # Get Segmentation Mask
+        mask = get_person_mask(frame_b, seg_model, DEVICE)
 
-            # Apply fade-in effect to the foreground
-            fade_alpha = warped_mask.astype(float) / 255.0
-            if b_idx < FADE_IN_FRAMES:
-                # Linear fade-in: starts at 0, ends at 1
-                fade_factor = b_idx / FADE_IN_FRAMES
-                fade_alpha = fade_alpha * fade_factor
-            
-            fade_alpha = cv2.merge([fade_alpha, fade_alpha, fade_alpha]) # 3 channels
+        # Fast Background Inpainting (Foreground Remover)
+        # Scales down to inpaint instantly, then scales up and replaces only the masked area
+        scale = 4
+        small_b = cv2.resize(frame_b, (w // scale, h // scale))
+        small_mask = cv2.resize(mask, (w // scale, h // scale), interpolation=cv2.INTER_NEAREST)
+        small_clean = cv2.inpaint(small_b, small_mask, 3, cv2.INPAINT_TELEA)
+        frame_b_clean_fast = cv2.resize(small_clean, (w, h))
 
-            # Apply fade-out effect to Video A (pre-clip) at the end
-            pre_clip_alpha = 1.0
-            post_clip_alpha = 0.0
-            frames_from_end = len(frames_a) - i
-            if frames_from_end <= FADE_OUT_FRAMES:
-                # Linear fade-out: ends at 0
-                fade_factor = frames_from_end / FADE_OUT_FRAMES
-                pre_clip_alpha = fade_factor
-                post_clip_alpha = 1.0 - fade_factor
+        mask_3ch_f = cv2.merge([mask, mask, mask]).astype(float) / 255.0
+        frame_b_clean = (frame_b.astype(float) * (1.0 - mask_3ch_f) + frame_b_clean_fast.astype(float) * mask_3ch_f).astype(np.uint8)
 
-            foreground = cv2.multiply(fade_alpha, warped_b.astype(float))
-            pre_clip_bg = cv2.multiply((1.0 - fade_alpha) * pre_clip_alpha, frame_a.astype(float))
-            post_clip_bg = cv2.multiply((1.0 - fade_alpha) * post_clip_alpha, warped_b.astype(float))
-            background = cv2.add(pre_clip_bg, post_clip_bg)
-            combined = cv2.add(foreground, background).astype(np.uint8)
-            
-            out.write(combined)
-        else:
-            frame_out = frame_a.copy().astype(float)
-            frames_from_end = len(frames_a) - i
-            if frames_from_end <= FADE_OUT_FRAMES:
-                # Linear fade-out: ends at 0
-                fade_factor = frames_from_end / FADE_OUT_FRAMES
-                frame_out = frame_out * fade_factor
-            
-            out.write(frame_out.astype(np.uint8))
+        # Warping
+        warped_b_clean = cv2.warpPerspective(frame_b_clean, H_B_t, (w, h), borderMode=cv2.BORDER_REPLICATE)
+        warped_b_full = cv2.warpPerspective(frame_b, H_B_t, (w, h), borderMode=cv2.BORDER_REPLICATE)
+        warped_a_clean = cv2.warpPerspective(frame_a, H_A_t, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
 
-    # --- RENDER VIDEO B  ---
+        # Masks Warping
+        warped_mask = cv2.warpPerspective(mask, H_B_t, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        
+        mask_a_valid = cv2.warpPerspective(dummy_white_frame, H_A_t, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        mask_a_valid = cv2.erode(mask_a_valid, erosion_kernel, iterations=1)
+        mask_a_valid_f = cv2.merge([mask_a_valid, mask_a_valid, mask_a_valid]).astype(float) / 255.0
+
+        # Alphas
+        fade_alpha = warped_mask.astype(float) / 255.0
+        if i < FADE_IN_FRAMES:
+            fade_alpha *= (i / FADE_IN_FRAMES)
+        fade_alpha_3ch = cv2.merge([fade_alpha, fade_alpha, fade_alpha])
+
+        pre_clip_alpha = 1.0
+        post_clip_alpha = 0.0
+        frames_from_end = OVERLAP_FRAMES - i
+        if frames_from_end <= FADE_OUT_FRAMES:
+            fade_factor = frames_from_end / FADE_OUT_FRAMES
+            pre_clip_alpha = fade_factor
+            post_clip_alpha = 1.0 - fade_factor
+
+        # Composite Background (A and Clean B)
+        bg_a_part = warped_a_clean.astype(float) * pre_clip_alpha
+        bg_b_part = warped_b_clean.astype(float) * post_clip_alpha
+        pure_bg_blend = bg_a_part + bg_b_part
+
+        bg_final = pure_bg_blend * mask_a_valid_f + warped_b_clean.astype(float) * (1.0 - mask_a_valid_f)
+
+        # Composite Foreground (Person strictly overlays over Background)
+        final_frame = warped_b_full.astype(float) * fade_alpha_3ch + bg_final * (1.0 - fade_alpha_3ch)
+        
+        out.write(final_frame.astype(np.uint8))
+        print(f"Transition progress: {i+1}/{OVERLAP_FRAMES}")
+
+    # --- RENDER POST-TRANSITION ---
     print(f"Cutting to full Video B (Skipping first {OVERLAP_FRAMES} frames)...")
-    
-    remaining_b = frames_b[OVERLAP_FRAMES:]
-
-    for i, frame_b in enumerate(remaining_b):
-        warped_b = cv2.warpPerspective(frame_b, H, (w, h), borderMode=cv2.BORDER_REPLICATE)
-        out.write(warped_b)
-        
-        if i % 30 == 0:
-            print(f"Post-clip progress: {i}/{len(remaining_b)}")
+    for i in range(OVERLAP_FRAMES, len(frames_b)):
+        out.write(frames_b[i])
+        if (i - OVERLAP_FRAMES) % 30 == 0:
+            print(f"Post-clip progress: {i - OVERLAP_FRAMES}/{len(frames_b) - OVERLAP_FRAMES}")
 
     out.release()
     print(f"Done! Saved to {OUTPUT_PATH}")
