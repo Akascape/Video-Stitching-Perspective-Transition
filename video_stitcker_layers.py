@@ -64,8 +64,8 @@ def preprocess_for_loftr(img_bgr, device, max_dim):
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-pass video stitcher for NLE compositing")
-    parser.add_argument("-a", "--video-a", default="pre2.mov", help="Path to first video clip")
-    parser.add_argument("-b", "--video-b", default="post2.mov", help="Path to second video clip")
+    parser.add_argument("-a", "--video-a", default="pre.mp4", help="Path to first video clip")
+    parser.add_argument("-b", "--video-b", default="post.mp4", help="Path to second video clip")
     parser.add_argument("--overlap", type=int, default=40, help="Number of frames to overlap/transition")
     parser.add_argument("--loftr-max-dim", type=int, default=1152, help="Max dim for LoFTR")
     args = parser.parse_args()
